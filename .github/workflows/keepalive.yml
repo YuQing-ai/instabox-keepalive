@@ -1,0 +1,33 @@
+name: InstaBox Keepalive
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wake machine
+        run: |
+          HOUR=$(date -u +%H)
+          MIN=$(date -u +%M)
+          HOUR=$((10#$HOUR))
+          MIN=$((10#$MIN))
+          if [ $((HOUR % 6)) -eq 0 ] && [ "$MIN" -lt 40 ]; then
+            echo "off-window, skipping"
+            exit 0
+          fi
+          for i in 1 2 3; do
+            CODE=$(curl -s -o /tmp/resp.txt -w "%{http_code}" -X POST "https://api.instabox.sh/v1/machines/${{ vars.INSTABOX_MACHINE_ID }}/wake" -H "Authorization: Bearer ${{ secrets.INSTABOX_API_KEY }}" -H "Content-Type: application/json" -d '{}')
+            echo "Attempt $i: HTTP $CODE"
+            cat /tmp/resp.txt; echo
+            if [ "$CODE" -ge 200 ] && [ "$CODE" -lt 300 ]; then
+              echo "Wake OK: HTTP $CODE"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "Wake failed after 3 attempts"
+          exit 1
